@@ -5,6 +5,7 @@ import com.optiva.tools.addevents.NatsEventPublisher;
 import com.optiva.tools.addevents.NatsReaderConfiguration;
 import io.nats.client.Connection;
 import io.nats.client.JetStream;
+import io.nats.client.JetStreamReader;
 import io.nats.client.JetStreamSubscription;
 import io.nats.client.Message;
 import io.nats.client.Nats;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class PullReadOneSubjectAndClose {
     private final NatsConfiguration natsConfiguration;
@@ -41,7 +43,7 @@ public class PullReadOneSubjectAndClose {
                                                             .ackPolicy(AckPolicy.Explicit)
                                                             .build();
 
-            PullSubscribeOptions pullOptions = PullSubscribeOptions.builder().configuration(cc).build();
+            PullSubscribeOptions pullOptions = PullSubscribeOptions.builder().build();
             pullSub = js.subscribe(natsConfiguration.getSubjectName(), pullOptions);
 
             consumeMessages();
@@ -101,14 +103,30 @@ public class PullReadOneSubjectAndClose {
         }
     }
 
-    private void consumeMessages() {
-        List<Message> messages = pullSub.fetch(natsConfiguration.getBatchSize(), Duration.ofMillis(1000));
-
-        if (messages != null && !messages.isEmpty()) {
-            for (Message msg : messages) {
-                msg.ack();
-                System.out.println(msg.metaData());
-            }
+    private void consumeMessages() throws InterruptedException {
+        JetStreamReader reader = pullSub.reader(100, 50);
+        String last = "";
+        AtomicInteger count = new AtomicInteger();
+        Message m = reader.nextMessage(1000);
+        while (m != null) {
+            last = processMessage(count, m);
+            m = reader.nextMessage(1000);
         }
+        System.out.println("# " + count + " -> " + last);
+        Duration duration = Duration.ofSeconds(1);
+        pullSub.drain(duration);
+    }
+
+    private String processMessage(AtomicInteger count, Message m) {
+        String s = m.getSubject();
+        int c = count.incrementAndGet();
+        if (c == 1) {
+            System.out.println("# " + c + " -> " + s);
+        }
+        else if (c % 1000 == 0) {
+            System.out.println("# " + c);
+        }
+        m.ack();
+        return s;
     }
 }

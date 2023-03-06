@@ -31,7 +31,7 @@ public class NatsEventPublisher {
         try {
             CompletableFuture<PublishAck> futureAck = AsyncPublishingConnectionManager.getInstance().publishAysnc(event, subject, streamName);
             if (futureAck != null) {
-                PublishAck ack = futureAck.get(30, TimeUnit.SECONDS);;
+                PublishAck ack = futureAck.get(2, TimeUnit.SECONDS);
                 if (ack.hasError()) {
                     String errMsg = "NatsEventPublisher#publish --> Message publishing ack returned an error : ";
                     throw new NatsEventException(errMsg + ack.getError());
